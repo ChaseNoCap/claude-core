@@ -121,6 +121,11 @@ export class StatelessClaudeSession implements IClaudeSession {
 
       // Log the prompt for debugging
       this.logger.debug(`Executing with context (${this.messages.length} previous messages)`);
+      
+      // Additional debug for rapid test issues
+      if (prompt.includes('Generate commit message')) {
+        this.logger.debug(`Full prompt for commit generation:\n${contextualPrompt}`);
+      }
 
       // Execute Claude with -p flag for non-interactive output
       const args = ['-p', '--model', this.model];
@@ -163,9 +168,12 @@ export class StatelessClaudeSession implements IClaudeSession {
           const endTime = new Date();
 
           if (code !== 0) {
-            this.logger.error(`Claude exited with code ${code}: ${error}`);
+            const errorMsg = error || 'No error output captured';
+            this.logger.error(`Claude exited with code ${code}: ${errorMsg}`);
+            this.logger.error(`Command was: ${this.claudePath} ${args.join(' ')}`);
+            this.logger.error(`First 500 chars of prompt: ${contextualPrompt.substring(0, 500)}`);
             this.status = 'error';
-            resolve(Result.fail(new Error(`Claude exited with code ${code}: ${error}`)));
+            resolve(Result.fail(new Error(`Claude exited with code ${code}: ${errorMsg}`)));
             return;
           }
 
@@ -175,6 +183,12 @@ export class StatelessClaudeSession implements IClaudeSession {
 
           const cleanOutput = parser.extractContent();
           const toolUses = parser.parseToolUses();
+          
+          // Debug log for empty or error outputs
+          if (!cleanOutput || cleanOutput.toLowerCase().includes('error')) {
+            this.logger.warn(`Suspicious output for session ${this.id}: "${cleanOutput}"`);
+            this.logger.debug(`Raw output was: "${output}"`);
+          }
 
           // Add messages to history
           const userMessage: Message = {
