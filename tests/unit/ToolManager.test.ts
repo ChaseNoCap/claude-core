@@ -164,18 +164,18 @@ describe('ToolManager', () => {
       expect(toolManager.getCliFlags()).toEqual([]);
     });
 
-    it('should return disable flags for restricted tools', () => {
+    it('should return disallowed flags for restricted tools', () => {
       toolManager.applyRestrictions([{ type: 'deny', tools: ['write', 'execute'] }]);
 
       const flags = toolManager.getCliFlags();
-      expect(flags).toEqual(['--disable-tool', 'write', '--disable-tool', 'execute']);
+      expect(flags).toEqual(['--disallowedTools', 'write,execute']);
     });
 
-    it('should return disable flags for tools not in allow list', () => {
+    it('should return allowed flags for tools in allow list', () => {
       toolManager.applyRestrictions([{ type: 'allow', tools: ['read'] }]);
 
       const flags = toolManager.getCliFlags();
-      expect(flags).toEqual(['--disable-tool', 'write', '--disable-tool', 'execute']);
+      expect(flags).toEqual(['--allowedTools', 'read']);
     });
   });
 });

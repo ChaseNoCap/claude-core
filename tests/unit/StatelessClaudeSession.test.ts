@@ -156,7 +156,7 @@ describe('StatelessClaudeSession', () => {
 
       expect(childProcess.spawn).toHaveBeenCalledWith(
         'claude',
-        expect.arrayContaining(['--disable-tool', 'write_file']),
+        expect.arrayContaining(['--disallowedTools', 'write_file']),
         expect.any(Object)
       );
     });

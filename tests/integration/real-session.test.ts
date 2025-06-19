@@ -3,7 +3,7 @@ import { Container } from 'inversify';
 import { ConsoleLogger } from '../../src/mocks/logger/index.js';
 import type { ILogger } from '@chasenocap/logger';
 import type { IEventBus } from '@chasenocap/event-system';
-import { ToolManager, SessionStore, CLAUDE_TYPES } from '../../src/index.js';
+import { ToolManager, SessionStore, CLAUDE_TYPES, ClaudeModel } from '../../src/index.js';
 import { StatelessClaudeSession } from '../../src/implementations/StatelessClaudeSession.js';
 
 describe('Real Integration Test - StatelessClaudeSession', () => {
@@ -39,7 +39,7 @@ describe('Real Integration Test - StatelessClaudeSession', () => {
       sessionStore,
       'test-session-1',
       {
-        model: 'claude-3-haiku-20240307',
+        model: ClaudeModel.HAIKU_3_5,
         claudePath: 'claude',
         context: {
           systemPrompt: 'You are a helpful assistant. Keep responses very brief.'
