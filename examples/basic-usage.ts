@@ -3,6 +3,7 @@ import type { ILogger } from '@chasenocap/logger';
 import type { IEventBus } from '@chasenocap/event-system';
 import { Claude, ToolManager, CLAUDE_TYPES } from '../src/index.js';
 import type { IClaude, ClaudeOptions } from '../src/index.js';
+import { ClaudeModel } from '../src/types/models.js';
 
 async function main(): Promise<void> {
   const container = new Container();
@@ -28,7 +29,7 @@ async function main(): Promise<void> {
   container.bind(CLAUDE_TYPES.IToolManager).to(ToolManager).inSingletonScope();
   container.bind<ClaudeOptions>(CLAUDE_TYPES.ClaudeOptions).toConstantValue({
     claudePath: 'claude',
-    defaultModel: 'claude-3-opus-20240229',
+    defaultModel: ClaudeModel.OPUS_4,
     maxConcurrentSessions: 5,
   });
   container.bind<IClaude>(CLAUDE_TYPES.IClaude).to(Claude).inSingletonScope();
@@ -39,7 +40,7 @@ async function main(): Promise<void> {
   try {
     // Create a session
     const sessionResult = await claude.createSession({
-      model: 'claude-3-opus-20240229',
+      model: ClaudeModel.OPUS_4,
       context: {
         systemPrompt: 'You are a helpful coding assistant.',
       },

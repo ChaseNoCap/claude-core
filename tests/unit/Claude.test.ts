@@ -9,6 +9,7 @@ import { SessionStore } from '../../src/implementations/SessionStore.js';
 import { CLAUDE_TYPES } from '../../src/types/injection-tokens.js';
 import { ClaudeEventType } from '../../src/types/events.js';
 import type { ClaudeOptions, SessionOptions, ToolConfiguration } from '../../src/types/options.js';
+import { ClaudeModel } from '../../src/types/models.js';
 
 describe('Claude', () => {
   let container: Container;
@@ -42,7 +43,7 @@ describe('Claude', () => {
     container.bind(CLAUDE_TYPES.SessionStore).to(SessionStore).inSingletonScope();
     container.bind<ClaudeOptions>(CLAUDE_TYPES.ClaudeOptions).toConstantValue({
       claudePath: 'claude',
-      defaultModel: 'claude-3-opus-20240229',
+      defaultModel: ClaudeModel.OPUS_4,
     });
 
     toolManager = container.get(CLAUDE_TYPES.IToolManager);

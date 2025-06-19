@@ -22,6 +22,7 @@ import { CLAUDE_TYPES } from '../types/injection-tokens.js';
 import { ClaudeEventType } from '../types/events.js';
 import { OutputParser } from '../utils/output-parser.js';
 import { SessionStore } from './SessionStore.js';
+import { DEFAULT_CLAUDE_MODEL } from '../types/models.js';
 
 /**
  * Stateless Claude session implementation that follows the pattern from the documentation.
@@ -60,7 +61,7 @@ export class StatelessClaudeSession implements IClaudeSession {
     };
 
     this.claudePath = options.claudePath || 'claude';
-    this.model = options.model || 'claude-3-sonnet-20241022';
+    this.model = options.model || DEFAULT_CLAUDE_MODEL;
 
     // Initialize with context history if provided
     if (this.context.history) {
@@ -121,21 +122,23 @@ export class StatelessClaudeSession implements IClaudeSession {
       // Log the prompt for debugging
       this.logger.debug(`Executing with context (${this.messages.length} previous messages)`);
 
-      // Execute Claude with -p flag
+      // Execute Claude with -p flag for non-interactive output
       const args = ['-p', '--model', this.model];
 
       // Add tool restrictions if any
       const toolFlags = this.toolManager.getCliFlags();
       args.push(...toolFlags);
 
-      // Add the full contextual prompt
-      args.push(contextualPrompt);
 
       return new Promise((resolve) => {
         const claude = spawn(this.claudePath, args, {
           stdio: ['pipe', 'pipe', 'pipe'],
           env: { ...process.env },
         });
+
+        // Write the prompt to stdin
+        claude.stdin.write(contextualPrompt);
+        claude.stdin.end();
 
         let output = '';
         let error = '';
@@ -145,8 +148,9 @@ export class StatelessClaudeSession implements IClaudeSession {
         });
 
         claude.stderr.on('data', (data) => {
-          error += data.toString();
-          this.logger.warn(`Claude stderr: ${data.toString()}`);
+          const stderr = data.toString();
+          error += stderr;
+          this.logger.warn(`Claude stderr: ${stderr}`);
         });
 
         claude.on('error', (err) => {
@@ -318,15 +322,40 @@ export class StatelessClaudeSession implements IClaudeSession {
   }
 
   async compact(strategy: 'smart' | 'summarize' | 'truncate' = 'smart'): Promise<IClaudeSession> {
-    // For now, truncate to last 10 messages
-    if (this.messages.length > 10) {
-      const summary = `[Previous ${this.messages.length - 10} messages summarized]`;
-      this.messages = [
-        { role: 'system', content: summary, timestamp: new Date() },
-        ...this.messages.slice(-10),
-      ];
-      this.metadata.messageCount = this.messages.length;
+    // Implementation varies based on strategy
+    switch (strategy) {
+      case 'truncate':
+        // Simple truncation to last 10 messages
+        if (this.messages.length > 10) {
+          this.messages = this.messages.slice(-10);
+          this.metadata.messageCount = this.messages.length;
+        }
+        break;
+        
+      case 'summarize':
+        // Summarize older messages (placeholder for future implementation)
+        if (this.messages.length > 10) {
+          const summary = `[Previous ${this.messages.length - 10} messages summarized]`;
+          this.messages = [
+            { role: 'system', content: summary, timestamp: new Date() },
+            ...this.messages.slice(-10),
+          ];
+          this.metadata.messageCount = this.messages.length;
+        }
+        break;
+        
+      case 'smart':
+      default:
+        // Smart compaction: keep system messages and recent context
+        if (this.messages.length > 10) {
+          const systemMessages = this.messages.filter(m => m.role === 'system');
+          const recentMessages = this.messages.slice(-10);
+          this.messages = [...systemMessages, ...recentMessages];
+          this.metadata.messageCount = this.messages.length;
+        }
+        break;
     }
+    
     return this;
   }
 

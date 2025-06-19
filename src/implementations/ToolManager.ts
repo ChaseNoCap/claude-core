@@ -62,15 +62,28 @@ export class ToolManager implements IToolManager {
 
   getCliFlags(): string[] {
     const flags: string[] = [];
-    const availableTools = this.getAvailableTools();
-    const allTools = this.getAllTools();
+    
+    if (this.restrictions.length === 0) {
+      return flags;
+    }
 
-    const disabledTools = allTools.filter(
-      (tool) => !availableTools.some((available) => available.name === tool.name),
-    );
+    const allowedTools: string[] = [];
+    const disallowedTools: string[] = [];
 
-    for (const tool of disabledTools) {
-      flags.push('--disable-tool', tool.name);
+    for (const restriction of this.restrictions) {
+      if (restriction.type === 'allow') {
+        allowedTools.push(...restriction.tools);
+      } else if (restriction.type === 'deny') {
+        disallowedTools.push(...restriction.tools);
+      }
+    }
+
+    if (allowedTools.length > 0) {
+      flags.push('--allowedTools', allowedTools.join(','));
+    }
+
+    if (disallowedTools.length > 0) {
+      flags.push('--disallowedTools', disallowedTools.join(','));
     }
 
     return flags;

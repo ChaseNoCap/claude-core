@@ -27,6 +27,14 @@ export type {
 // Constants and Types
 export { CLAUDE_TYPES } from './types/injection-tokens.js';
 export { ClaudeEventType } from './types/events.js';
+export { 
+  ClaudeModel, 
+  ClaudeModelAlias, 
+  DEFAULT_CLAUDE_MODEL,
+  ModelPricing,
+  isValidClaudeModel,
+  getModelDisplayName 
+} from './types/models.js';
 
 export type {
   ClaudeOptions,

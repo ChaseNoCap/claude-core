@@ -82,7 +82,9 @@ npm test tests/integration/
 
 ## Important Memories
 
-- Remember that claude cannot launch claude and you must ask the user
+- **CRITICAL**: Claude cannot launch Claude - integration tests that attempt to spawn the Claude CLI will fail when run from within Claude
+  - When testing, users must run tests outside of Claude environment
+  - Use mock implementations for testing Claude CLI interactions
 - Currently using mock implementations for @chasenocap dependencies
 - Claude CLI is stateless - each invocation spawns a new process
 - Session "state" is maintained by passing conversation history with each request
