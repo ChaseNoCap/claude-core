@@ -176,6 +176,11 @@ export class SessionStore {
       const newSession = this.sessions.get(newSessionId)!;
       newSession.messages = forkedMessages;
       newSession.forkPoints = [...sourceSession.forkPoints, forkPoint];
+      
+      // Update the message index with forked messages
+      forkedMessages.forEach(msg => {
+        this.messageIndex.set(msg.id, msg);
+      });
 
       // Update source session's fork points
       sourceSession.forkPoints.push(forkPoint);

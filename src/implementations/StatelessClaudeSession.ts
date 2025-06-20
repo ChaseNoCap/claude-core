@@ -71,6 +71,13 @@ export class StatelessClaudeSession implements IClaudeSession {
 
     // Save session to store
     void this.sessionStore.saveSession(id, options.parentId, this.context);
+    
+    // Also add existing messages to the store so getHistory() works properly
+    if (this.messages.length > 0) {
+      this.messages.forEach(msg => {
+        void this.sessionStore.addMessage(id, msg);
+      });
+    }
   }
 
   async initialize(): Promise<void> {
@@ -150,6 +157,16 @@ export class StatelessClaudeSession implements IClaudeSession {
           env: { ...process.env },
         });
 
+        // Set a timeout if specified
+        let timeoutHandle: NodeJS.Timeout | undefined;
+        if (options?.timeout) {
+          timeoutHandle = setTimeout(() => {
+            claude.kill('SIGTERM');
+            this.logger.error(`Session ${this.id} - Command timed out after ${options.timeout}ms`);
+            resolve(Result.fail(new Error(`Command timed out after ${options.timeout}ms`)));
+          }, options.timeout);
+        }
+
         // Write the prompt to stdin
         claude.stdin.write(contextualPrompt);
         claude.stdin.end();
@@ -175,6 +192,11 @@ export class StatelessClaudeSession implements IClaudeSession {
 
         claude.on('exit', (code) => {
           const endTime = new Date();
+          
+          // Clear timeout if it was set
+          if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+          }
 
           if (code !== 0) {
             const errorMsg = error || 'No error output captured';
@@ -190,8 +212,28 @@ export class StatelessClaudeSession implements IClaudeSession {
           const parser = new OutputParser();
           parser.append(output);
 
-          const cleanOutput = parser.extractContent();
+          let cleanOutput = parser.extractContent();
           const toolUses = parser.parseToolUses();
+          
+          // If the output is suspiciously long and contains conversation markers, 
+          // it might be echoing the conversation history
+          if (cleanOutput.length > 5000 && (cleanOutput.includes('\n\nH:') || cleanOutput.includes('\n\nA:'))) {
+            // Find the first occurrence of a conversation marker and truncate there
+            const markers = ['\n\nH:', '\n\nHuman:', '\n\nA:', '\n\nAssistant:'];
+            let earliestIndex = cleanOutput.length;
+            
+            for (const marker of markers) {
+              const index = cleanOutput.indexOf(marker);
+              if (index > 0 && index < earliestIndex) {
+                earliestIndex = index;
+              }
+            }
+            
+            if (earliestIndex < cleanOutput.length) {
+              cleanOutput = cleanOutput.substring(0, earliestIndex).trim();
+              this.logger.warn(`Session ${this.id} - Truncated extremely long output with conversation history from ${output.length} to ${cleanOutput.length} chars`);
+            }
+          }
           
           // Debug logging for output cleaning
           if (cleanOutput.includes('\n\n') || cleanOutput.includes('Human:') || cleanOutput.includes('Assistant:')) {
@@ -227,8 +269,7 @@ export class StatelessClaudeSession implements IClaudeSession {
           const conversationMarkers = [
             '\n\nH:', '\n\nHuman:', '\n\nA:', '\n\nAssistant:', 
             '\n\nh:', '\n\na:', '\nH:', '\nHuman:', '\nA:', '\nAssistant:',
-            '\n\nQ:', '\n\nQuestion:', '\n\nq:',
-            '\nh:', '\na:' // Also check single newline with lowercase
+            '\n\nQ:', '\n\nQuestion:', '\n\nq:'
           ];
           
           for (const marker of conversationMarkers) {
@@ -243,7 +284,8 @@ export class StatelessClaudeSession implements IClaudeSession {
           const rolePrefixes = [
             'Assistant:', 'Human:', 'A:', 'H:', 
             'assistant:', 'human:', 'a:', 'h:',
-            'Assistant: ', 'Human: ', 'A: ', 'H: '
+            'Assistant: ', 'Human: ', 'A: ', 'H: ',
+            "I'll respond only to your current question."
           ];
           for (const prefix of rolePrefixes) {
             if (finalOutput.startsWith(prefix)) {
