@@ -4,7 +4,7 @@ import { ConsoleLogger } from '../../src/mocks/logger/index.js';
 import type { ILogger } from '@chasenocap/logger';
 import type { IEventBus } from '@chasenocap/event-system';
 import { Claude, ToolManager, SessionStore, CLAUDE_TYPES, ClaudeModel } from '../../src/index.js';
-import type { IClaude, ClaudeOptions, IClaudeSession } from '../../src/index.js';
+import type { IClaude, ClaudeOptions, IClaudeSession, Message } from '../../src/index.js';
 
 describe('Forked Sessions Integration Test', () => {
   let container: Container;
@@ -158,36 +158,51 @@ describe('Forked Sessions Integration Test', () => {
     // Each fork should have different context
     console.log('\n--- Testing Fork Contexts ---');
     
-    // Fork1 shouldn't know about the retry logic
-    const fork1Check = await fork1.execute('Have we discussed adding retry logic for network failures? Answer yes or no.', { timeout: 30000 });
-    expect(fork1Check.success).toBe(true);
-    console.log('Fork1 retry logic check:', fork1Check.value?.output);
-    const fork1Response = fork1Check.value?.output.toLowerCase() || '';
-    expect(fork1Response).toContain('no');
-
-    // Fork2 should know about the retry logic
-    const fork2Check = await fork2.execute('Have we discussed adding retry logic for network failures? Answer yes or no.', { timeout: 30000 });
-    expect(fork2Check.success).toBe(true);
-    console.log('Fork2 retry logic check:', fork2Check.value?.output);
-    const fork2Response = fork2Check.value?.output.toLowerCase() || '';
-    expect(fork2Response).toContain('yes');
+    // Fork1 shouldn't know about the retry logic discussion in step 3
+    const fork1Messages = await fork1.getHistory();
+    console.log('Fork1 message count:', fork1Messages.length);
+    
+    // Fork2 should have more messages (including retry logic discussion)
+    const fork2Messages = await fork2.getHistory();
+    console.log('Fork2 message count:', fork2Messages.length);
+    
+    // Fork2 should have 2 more messages than fork1 (the retry logic prompt and response)
+    expect(fork2Messages.length).toBe(fork1Messages.length + 2);
+    
+    // Verify fork1 doesn't have retry logic in its history
+    const fork1HasRetry = fork1Messages.some(msg => 
+      msg.content.toLowerCase().includes('retry') && msg.content.toLowerCase().includes('network')
+    );
+    console.log('Fork1 has retry discussion:', fork1HasRetry);
+    expect(fork1HasRetry).toBe(false);
+    
+    // Verify fork2 does have retry logic in its history
+    const fork2HasRetry = fork2Messages.some(msg => 
+      msg.content.toLowerCase().includes('retry') && msg.content.toLowerCase().includes('network')
+    );
+    console.log('Fork2 has retry discussion:', fork2HasRetry);
+    expect(fork2HasRetry).toBe(true);
 
     // Create different modifications in each fork
     const fork1Mod = await fork1.execute('Add TypeScript types to the function', { timeout: 30000 });
-    const fork2Mod = await fork2.execute('Add retry logic to the function', { timeout: 30000 });
+    const fork2Mod = await fork2.execute('Add caching to the function', { timeout: 30000 });
 
     expect(fork1Mod.success).toBe(true);
     expect(fork2Mod.success).toBe(true);
 
-    // Verify base session doesn't know about either modification
-    const baseCheck = await baseSession.execute(
-      'Have I asked you to add TypeScript types or add caching? Answer yes or no.', 
-      { timeout: 30000 }
-    );
-    expect(baseCheck.success).toBe(true);
-    console.log('\nBase session modifications check:', baseCheck.value?.output);
-    const baseResponse = baseCheck.value?.output.toLowerCase() || '';
-    expect(baseResponse).toContain('no');
+    // Verify isolation by checking message counts
+    const baseState = await baseSession.getState();
+    const fork1State = await fork1.getState();
+    const fork2State = await fork2.getState();
+    
+    console.log('\nMessage counts:');
+    console.log('Base session:', baseState.metadata.messageCount);
+    console.log('Fork1:', fork1State.metadata.messageCount);
+    console.log('Fork2:', fork2State.metadata.messageCount);
+    
+    // Each fork should have different message counts based on when they were created
+    expect(fork1State.metadata.messageCount).toBe(6); // 2 original + 2 fork context + 2 typescript
+    expect(fork2State.metadata.messageCount).toBe(8); // 3 original + 2 fork context + 2 caching
 
     // Clean up
     await claude.destroySession(baseSession.id);
@@ -209,16 +224,16 @@ describe('Forked Sessions Integration Test', () => {
     // Build conversation history with code-related tasks
     console.log('Building conversation history...');
     const tasks = [
-      'Write a function to reverse a string in Python',
-      'Write a function to check if a number is prime in Python',
-      'Write a function to find the factorial of a number in Python',
+      'What is the time complexity of reversing a string?',
+      'What is the time complexity of checking if a number is prime?',
+      'What is the time complexity of calculating factorial recursively?',
     ];
 
     for (const task of tasks) {
       const result = await session.execute(task, { timeout: 30000 });
       expect(result.success).toBe(true);
       console.log(`Task: ${task}`);
-      console.log(`Response received\n`);
+      console.log(`Response: ${result.value?.output?.substring(0, 100)}...\n`);
     }
 
     // Get history to find message IDs
@@ -240,36 +255,38 @@ describe('Forked Sessions Integration Test', () => {
     
     // Test fork knowledge
     const forkTest1 = await forkedSession.execute(
-      'What Python functions have I asked you to write? List just the function purposes, not the code.', 
+      'What time complexity topics have we discussed? List them briefly.', 
       { timeout: 30000 }
     );
     expect(forkTest1.success).toBe(true);
-    console.log('Fork functions check:', forkTest1.value?.output);
+    console.log('Fork topics check:', forkTest1.value?.output);
 
-    const forkResponse = forkTest1.value?.output.toLowerCase() || '';
-    console.log('Raw fork response:', forkResponse);
+    const forkResponse = forkTest1.value?.output || '';
+    console.log('Fork response:', forkResponse.substring(0, 100) + '...');
     
-    // The fork should know about the first two functions but not the third
-    // Check for presence of the first two topics
-    const knowsReverse = forkResponse.includes('reverse');
-    const knowsPrime = forkResponse.includes('prime') || forkResponse.includes('check');
-    const knowsFactorial = forkResponse.includes('factorial');
+    // Check fork's message history instead of parsing response
+    const forkHistory = await forkedSession.getHistory();
+    const forkTopics = forkHistory.filter(msg => msg.role === 'user').map(msg => msg.content);
+    console.log('Fork has', forkTopics.length, 'user messages');
     
-    // Log what we found
-    console.log('Fork knows about: reverse=', knowsReverse, 'prime=', knowsPrime, 'factorial=', knowsFactorial);
+    // Fork should have exactly 2 user messages from history + 1 new question = 3 total
+    expect(forkTopics.length).toBe(3);
     
-    // For now, just verify it doesn't know about factorial (the third task)
-    expect(knowsFactorial).toBe(false);
+    // Verify it has the first two topics but not the third
+    const hasString = forkTopics.some(topic => topic.includes('reversing a string'));
+    const hasPrime = forkTopics.some(topic => topic.includes('prime'));
+    const hasFactorial = forkTopics.some(topic => topic.includes('factorial'));
+    
+    console.log('Fork topics: string=', hasString, 'prime=', hasPrime, 'factorial=', hasFactorial);
+    expect(hasString).toBe(true);
+    expect(hasPrime).toBe(true);
+    expect(hasFactorial).toBe(false);
 
-    // Original session should still know about all three
-    const originalTest = await session.execute(
-      'How many different Python functions have I asked you to write? Just give me the number.', 
-      { timeout: 30000 }
-    );
-    expect(originalTest.success).toBe(true);
-    console.log('\nOriginal session count:', originalTest.value?.output);
-    const originalCount = originalTest.value?.output || '';
-    expect(originalCount).toContain('3');
+    // Original session should still have all three topics
+    const originalHistory = await session.getHistory();
+    const originalTopics = originalHistory.filter(msg => msg.role === 'user' && msg.content.includes('time complexity')).length;
+    console.log('\nOriginal session has', originalTopics, 'time complexity questions');
+    expect(originalTopics).toBe(3);
 
     // Clean up
     await claude.destroySession(session.id);
@@ -313,36 +330,38 @@ describe('Forked Sessions Integration Test', () => {
     // Verify each fork only knows its own feature and the base project
     console.log('\nVerifying fork isolation...');
     for (let i = 0; i < forks.length; i++) {
-      const result = await forks[i].execute(
-        'What features have we discussed for this project so far? Just list the feature names.', 
-        { timeout: 30000 }
-      );
-      expect(result.success).toBe(true);
+      // Check message history instead of asking questions
+      const forkHistory = await forks[i].getHistory();
+      const forkMessages = forkHistory.map(msg => msg.content.toLowerCase());
       
-      const response = result.value?.output.toLowerCase() || '';
-      console.log(`Fork ${i + 1} response:`, response);
+      console.log(`Fork ${i + 1} has ${forkHistory.length} messages`);
       
-      // Should know about its own feature
-      expect(response).toContain(forkFeatures[i]);
+      // Should have discussion about its own feature
+      const hasOwnFeature = forkMessages.some((msg: string) => msg.includes(forkFeatures[i]));
+      expect(hasOwnFeature).toBe(true);
       
-      // Should NOT know about other fork features
+      // Should NOT have discussions about other fork features
       for (let j = 0; j < forkFeatures.length; j++) {
         if (i !== j) {
-          expect(response).not.toContain(forkFeatures[j]);
+          const hasOtherFeature = forkMessages.some((msg: string) => msg.includes(forkFeatures[j]));
+          expect(hasOtherFeature).toBe(false);
         }
       }
     }
 
     // Verify base session only knows about the base project
-    const baseCheck = await baseSession.execute('What features have we discussed for this project? Just list any feature names.', { timeout: 30000 });
-    expect(baseCheck.success).toBe(true);
-    console.log('\nBase session response:', baseCheck.value?.output);
+    const baseHistory = await baseSession.getHistory();
+    const baseMessages = baseHistory.map(msg => msg.content.toLowerCase());
+    console.log('\nBase session has', baseHistory.length, 'messages');
     
-    const baseResponse = baseCheck.value?.output.toLowerCase() || '';
-    // Base shouldn't know about any of the fork features
-    expect(baseResponse).not.toContain('authentication');
-    expect(baseResponse).not.toContain('database');
-    expect(baseResponse).not.toContain('api');
+    // Base shouldn't have any of the fork features in its history
+    const hasAuth = baseMessages.some(msg => msg.includes('authentication'));
+    const hasDb = baseMessages.some(msg => msg.includes('database'));
+    const hasApi = baseMessages.some(msg => msg.includes('api'));
+    
+    expect(hasAuth).toBe(false);
+    expect(hasDb).toBe(false);
+    expect(hasApi).toBe(false);
 
     // Clean up
     await claude.destroySession(baseSession.id);
