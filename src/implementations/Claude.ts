@@ -58,6 +58,7 @@ export class Claude implements IClaude {
         {
           ...options,
           claudePath: this.options.claudePath,
+          defaultTimeout: this.options.defaultExecuteTimeout,
         },
       );
 

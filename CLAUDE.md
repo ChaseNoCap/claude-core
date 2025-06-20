@@ -72,7 +72,7 @@ Key architectural patterns:
 **Enhancement Status (Sprint 1 - Foundation):**
 - [ ] Story 1.1: Stream-JSON Output Format (5 points)
 - [ ] Story 1.2: JSON Output Format (3 points)
-- [ ] Story 3.2: Timeout Implementation (3 points)
+- [x] Story 3.2: Timeout Implementation (3 points) ✅
 - [ ] Story 4.2: System Prompt Management (3 points)
 
 ## Testing

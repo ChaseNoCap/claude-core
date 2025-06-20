@@ -3,6 +3,16 @@ export interface ClaudeOptions {
   defaultModel?: string;
   maxConcurrentSessions?: number;
   sessionTimeout?: number;
+  /**
+   * Default timeout for execute operations in milliseconds
+   * If not specified, uses DEFAULT_TIMEOUTS.STANDARD_REQUEST
+   */
+  defaultExecuteTimeout?: number;
+  /**
+   * Grace period in milliseconds before forcefully killing a process after SIGTERM
+   * If not specified, uses DEFAULT_TIMEOUTS.KILL_GRACE_PERIOD
+   */
+  killGracePeriod?: number;
   retryOptions?: RetryOptions;
   resourceLimits?: ResourceLimits;
 }
@@ -29,7 +39,15 @@ export interface SpawnOptions {
 }
 
 export interface ExecuteOptions {
+  /**
+   * Timeout in milliseconds. If not specified, uses the default timeout
+   * based on operation type or the session default
+   */
   timeout?: number;
+  /**
+   * Hint about the type of operation for automatic timeout selection
+   */
+  operationType?: 'text' | 'code' | 'file' | 'system' | 'quick';
   stream?: boolean;
   tools?: string[];
 }

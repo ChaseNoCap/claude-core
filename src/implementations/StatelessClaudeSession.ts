@@ -17,12 +17,14 @@ import type {
   ExecutionMetadata,
   SessionMetadata,
   Message,
+  ClaudeOptions,
 } from '../types/options.js';
 import { CLAUDE_TYPES } from '../types/injection-tokens.js';
 import { ClaudeEventType } from '../types/events.js';
 import { OutputParser } from '../utils/output-parser.js';
 import { SessionStore } from './SessionStore.js';
 import { DEFAULT_CLAUDE_MODEL } from '../types/models.js';
+import { DEFAULT_TIMEOUTS, OPERATION_TIMEOUTS } from '../constants/defaults.js';
 
 /**
  * Stateless Claude session implementation that follows the pattern from the documentation.
@@ -40,6 +42,7 @@ export class StatelessClaudeSession implements IClaudeSession {
   private claudePath: string;
   private model: string;
   private messages: Message[] = [];
+  private defaultTimeout: number;
 
   constructor(
     @inject(CLAUDE_TYPES.ILogger) private logger: ILogger,
@@ -47,7 +50,7 @@ export class StatelessClaudeSession implements IClaudeSession {
     @inject(CLAUDE_TYPES.IToolManager) private toolManager: IToolManager,
     @inject(CLAUDE_TYPES.SessionStore) private sessionStore: SessionStore,
     id: string,
-    options: SessionOptions & { claudePath?: string },
+    options: SessionOptions & { claudePath?: string; defaultTimeout?: number },
   ) {
     this.id = id;
     this.parentId = options.parentId;
@@ -62,6 +65,7 @@ export class StatelessClaudeSession implements IClaudeSession {
 
     this.claudePath = options.claudePath || 'claude';
     this.model = options.model || DEFAULT_CLAUDE_MODEL;
+    this.defaultTimeout = options.defaultTimeout || DEFAULT_TIMEOUTS.STANDARD_REQUEST;
 
     // Initialize with context history if provided
     if (this.context.history) {
@@ -121,6 +125,84 @@ export class StatelessClaudeSession implements IClaudeSession {
     return parts.join('\n');
   }
 
+  /**
+   * Determines the appropriate timeout for a request based on options and prompt content
+   */
+  private determineTimeout(prompt: string, options?: ExecuteOptions): number {
+    // 1. If explicit timeout is provided, use it
+    if (options?.timeout !== undefined) {
+      return options.timeout;
+    }
+
+    // 2. If operation type hint is provided, use the corresponding timeout
+    if (options?.operationType) {
+      switch (options.operationType) {
+        case 'quick':
+          return OPERATION_TIMEOUTS.QUICK_RESPONSE;
+        case 'text':
+          return OPERATION_TIMEOUTS.TEXT_GENERATION;
+        case 'code':
+          return OPERATION_TIMEOUTS.CODE_GENERATION;
+        case 'file':
+          return OPERATION_TIMEOUTS.FILE_OPERATIONS;
+        case 'system':
+          return OPERATION_TIMEOUTS.SYSTEM_COMMANDS;
+      }
+    }
+
+    // 3. Try to infer operation type from prompt content
+    const lowerPrompt = prompt.toLowerCase();
+    
+    // Quick responses (only for very specific patterns, not just short prompts)
+    if (
+      lowerPrompt.includes('yes or no') ||
+      lowerPrompt.includes('true or false') ||
+      lowerPrompt.includes('single word')
+    ) {
+      return OPERATION_TIMEOUTS.QUICK_RESPONSE;
+    }
+
+    // Code generation
+    if (
+      lowerPrompt.includes('write code') ||
+      lowerPrompt.includes('implement') ||
+      lowerPrompt.includes('function') ||
+      lowerPrompt.includes('class') ||
+      lowerPrompt.includes('debug')
+    ) {
+      return OPERATION_TIMEOUTS.CODE_GENERATION;
+    }
+
+    // File operations
+    if (
+      lowerPrompt.includes('edit') ||
+      lowerPrompt.includes('create file') ||
+      lowerPrompt.includes('modify') ||
+      lowerPrompt.includes('write to')
+    ) {
+      return OPERATION_TIMEOUTS.FILE_OPERATIONS;
+    }
+
+    // System commands
+    if (
+      lowerPrompt.includes('run') ||
+      lowerPrompt.includes('execute') ||
+      lowerPrompt.includes('bash') ||
+      lowerPrompt.includes('command')
+    ) {
+      return OPERATION_TIMEOUTS.SYSTEM_COMMANDS;
+    }
+
+    // 4. Check if tools are being used
+    if (options?.tools && options.tools.length > 0) {
+      // If tools are specified, likely a longer operation
+      return DEFAULT_TIMEOUTS.COMPLEX_REQUEST;
+    }
+
+    // 5. Fall back to default timeout
+    return this.defaultTimeout;
+  }
+
   async execute(prompt: string, options?: ExecuteOptions): Promise<IResult<ExecuteResult>> {
     try {
       this.metadata.lastUsedAt = new Date();
@@ -152,19 +234,42 @@ export class StatelessClaudeSession implements IClaudeSession {
 
 
       return new Promise((resolve) => {
-        const claude = spawn(this.claudePath, args, {
-          stdio: ['pipe', 'pipe', 'pipe'],
-          env: { ...process.env },
-        });
+        let claude;
+        try {
+          claude = spawn(this.claudePath, args, {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: { ...process.env },
+          });
+        } catch (error) {
+          this.logger.error(`Failed to spawn Claude process: ${error}`);
+          resolve(Result.fail(error as Error));
+          return;
+        }
 
-        // Set a timeout if specified
+        // Determine and set timeout
+        const timeout = this.determineTimeout(prompt, options);
         let timeoutHandle: NodeJS.Timeout | undefined;
-        if (options?.timeout) {
+        let killTimeoutHandle: NodeJS.Timeout | undefined;
+        let isTimedOut = false;
+
+        this.logger.debug(`Session ${this.id} - Using timeout of ${timeout}ms for this request`);
+
+        // Only set timeout if it's greater than 0
+        if (timeout > 0) {
           timeoutHandle = setTimeout(() => {
+            isTimedOut = true;
+            this.logger.warn(`Session ${this.id} - Request timed out after ${timeout}ms, sending SIGTERM`);
+            
+            // First try graceful termination with SIGTERM
             claude.kill('SIGTERM');
-            this.logger.error(`Session ${this.id} - Command timed out after ${options.timeout}ms`);
-            resolve(Result.fail(new Error(`Command timed out after ${options.timeout}ms`)));
-          }, options.timeout);
+            
+            // Set a grace period before forceful termination
+            killTimeoutHandle = setTimeout(() => {
+              if (claude.killed) return;
+              this.logger.error(`Session ${this.id} - Process did not terminate gracefully, sending SIGKILL`);
+              claude.kill('SIGKILL');
+            }, DEFAULT_TIMEOUTS.KILL_GRACE_PERIOD);
+          }, timeout);
         }
 
         // Write the prompt to stdin
@@ -185,17 +290,32 @@ export class StatelessClaudeSession implements IClaudeSession {
         });
 
         claude.on('error', (err) => {
+          // Clear timeouts
+          if (timeoutHandle) clearTimeout(timeoutHandle);
+          if (killTimeoutHandle) clearTimeout(killTimeoutHandle);
+          
           this.logger.error(`Failed to spawn Claude: ${err.message}`);
           this.status = 'error';
           resolve(Result.fail(err));
         });
 
-        claude.on('exit', (code) => {
+        claude.on('exit', (code, signal) => {
           const endTime = new Date();
           
-          // Clear timeout if it was set
-          if (timeoutHandle) {
-            clearTimeout(timeoutHandle);
+          // Clear timeouts
+          if (timeoutHandle) clearTimeout(timeoutHandle);
+          if (killTimeoutHandle) clearTimeout(killTimeoutHandle);
+
+          // Handle timeout case
+          if (isTimedOut) {
+            const timeoutError = new Error(
+              `Claude request timed out after ${timeout}ms. ` +
+              `The operation was terminated with signal: ${signal || 'SIGTERM'}`
+            );
+            this.logger.error(`Session ${this.id} - ${timeoutError.message}`);
+            this.status = 'error';
+            resolve(Result.fail(timeoutError));
+            return;
           }
 
           if (code !== 0) {

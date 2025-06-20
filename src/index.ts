@@ -71,3 +71,7 @@ export type {
 // Utilities
 export { OutputParser } from './utils/output-parser.js';
 export { ProcessUtils, ProcessEventEmitter } from './utils/process-utils.js';
+
+// Constants
+export { DEFAULT_TIMEOUTS, OPERATION_TIMEOUTS } from './constants/defaults.js';
+export type { OperationType } from './constants/defaults.js';
