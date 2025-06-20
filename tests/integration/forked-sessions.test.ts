@@ -17,32 +17,37 @@ describe('Forked Sessions Integration Test', () => {
     maxRetries = 3,
     timeout = 30000
   ): Promise<ExecuteResult> {
+    let lastError: Error | undefined;
+    
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`[Retry ${attempt}/${maxRetries}] Executing: "${prompt.substring(0, 50)}..."`);
       const result = await session.execute(prompt, { timeout });
       
       if (result.success && result.value) {
         const output = result.value.output;
         // Check if output contains conversation history markers
         if (output.length > 1000 && (output.includes('\n\nH:') || output.includes('\n\nA:'))) {
+          console.log(`[Retry ${attempt}/${maxRetries}] Response contained conversation history (${output.length} chars)`);
           if (attempt < maxRetries) {
-            console.log(`Attempt ${attempt}: Response contained conversation history, retrying...`);
-            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+            console.log(`[Retry ${attempt}/${maxRetries}] Waiting 2s before retry...`);
+            await new Promise(resolve => setTimeout(resolve, 2000));
             continue;
           }
         }
+        console.log(`[Retry ${attempt}/${maxRetries}] Success!`);
         return result.value;
       }
       
-      if (!result.success && attempt < maxRetries) {
-        console.log(`Attempt ${attempt} failed: ${result.error?.message}, retrying...`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        continue;
-      }
+      lastError = result.error || new Error('Unknown error');
+      console.log(`[Retry ${attempt}/${maxRetries}] Failed: ${lastError.message}`);
       
-      throw result.error || new Error('Failed to execute prompt');
+      if (attempt < maxRetries) {
+        console.log(`[Retry ${attempt}/${maxRetries}] Waiting 2s before retry...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
     }
     
-    throw new Error('Max retries exceeded');
+    throw lastError || new Error('Max retries exceeded');
   }
 
   beforeAll(() => {
