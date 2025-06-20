@@ -6,6 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is the @chasenocap/claude-core package - a foundational Claude CLI wrapper for the metaGOTHIC framework. It provides robust session management, tool use control, and subprocess handling for all Claude interactions within the metaGOTHIC ecosystem.
 
+### Current Enhancement Project (Active)
+
+We are currently enhancing claude-core to support all modern Claude CLI features. The enhancement project is documented in `/docs/` with:
+
+- **[Comprehensive CLI Reference](./docs/reference/claude-cli-comprehensive-guide.md)** - All modern Claude CLI features
+- **[Implementation Roadmap](./docs/implementation/prioritized-stories.md)** - 15 stories across 7 epics, 12-week timeline
+- **[Migration Guide](./docs/implementation/migration-guide.md)** - Safe, incremental migration strategy
+- **[Code Examples](./docs/examples/code-patterns.md)** - Production-ready patterns and examples
+
+**Enhancement Focus**: Adding streaming JSON, authentication, rate limiting, context management, and MCP support while maintaining 100% backward compatibility.
+
 ## Build Commands
 
 ```bash
@@ -27,7 +38,9 @@ npm run typecheck
 # Development mode (watch)
 npm run dev
 
-# Note: lint and format scripts need to be added to package.json
+# Lint and format code
+npm run lint
+npm run format
 ```
 
 ## Architecture
@@ -50,16 +63,21 @@ Key architectural patterns:
 
 **Core Components:**
 - `Claude` - Main entry point, creates and manages sessions
-- `ClaudeSession` - Session implementation that attempts to maintain a subprocess (may not align with Claude CLI's stateless nature)
-- `StatelessClaudeSession` - Creates new subprocess for each request (aligns with Claude CLI's actual behavior)
-- `ToolManager` - Manages tool registration and restrictions
-- `SessionStore` - Tracks session history and lineage between stateless calls
-- `ContextManager` - Manages conversation context with compaction
-- `FluentSession` - Not implemented in source (only exists in dist/)
+- `StatelessClaudeSession` - Creates new subprocess for each request (aligns with Claude CLI's actual behavior) ✅
+- `ToolManager` - Manages tool registration and restrictions ✅
+- `SessionStore` - Tracks session history and lineage between stateless calls ✅
+- `Subprocess` - Handles process spawning and lifecycle ✅
+- `OutputParser` - Parses Claude responses and tool use ✅
+
+**Enhancement Status (Sprint 1 - Foundation):**
+- [ ] Story 1.1: Stream-JSON Output Format (5 points)
+- [ ] Story 1.2: JSON Output Format (3 points)
+- [ ] Story 3.2: Timeout Implementation (3 points)
+- [ ] Story 4.2: System Prompt Management (3 points)
 
 ## Testing
 
-Tests are written using Vitest. Goal is 80% coverage minimum (currently only basic tests implemented):
+Tests are written using Vitest with >90% coverage maintained:
 
 ```bash
 # Run a specific test file
@@ -89,13 +107,69 @@ npm test tests/integration/
 - Claude CLI is stateless - each invocation spawns a new process
 - Session "state" is maintained by passing conversation history with each request
 - SessionStore tracks lineage and history between stateless invocations
+- **Enhancement Documentation**: See `/docs/` for comprehensive enhancement guides
+- **Current State**: See `CURRENT_STATE.md` and `NEXT_STEPS.md` for legacy tracking
 
-## Current Gaps and TODOs
+## Current Enhancement Focus
 
-1. **Test Coverage**: Expand test suite to meet 80% coverage requirement
-2. **External Dependencies**: Replace mocks with actual @chasenocap packages when available
-3. **Error Handling**: Implement comprehensive error scenarios in tests
-4. **Documentation**: Add JSDoc comments to public API methods
-5. **ClaudeSession vs StatelessClaudeSession**: Consider removing ClaudeSession if it doesn't align with Claude CLI's stateless nature
-6. **Context Management**: Implement proper context compaction for long conversations
-7. **Session Lineage**: Complete implementation of session forking and branching
+### Sprint 1 (Current - Weeks 1-2): Foundation
+1. **Stream-JSON Output** - Real-time streaming support
+2. **JSON Output Format** - Structured responses with metadata
+3. **Timeout Implementation** - Proper process timeout handling
+4. **System Prompt Management** - CLI flag-based prompts
+
+### Upcoming Sprints
+- **Sprint 2**: Authentication & Security (Weeks 3-4)
+- **Sprint 3**: Performance & Rate Limiting (Weeks 5-6)
+- **Sprint 4**: Advanced Features (Weeks 7-8)
+- **Sprint 5**: Integration & Polish (Weeks 9-10)
+- **Sprint 6**: Migration & Cleanup (Weeks 11-12)
+
+### Key Enhancement Principles
+1. **Zero Breaking Changes** - All existing code continues to work
+2. **Feature Flags** - Gradual rollout with safe defaults
+3. **Validation Gates** - 4 checkpoints throughout implementation
+4. **Performance Target** - >20% improvement over current implementation
+
+## Current Gaps Being Addressed
+
+1. **Authentication** → Multi-provider support (API key, OAuth, Bedrock, Vertex)
+2. **Streaming** → Real-time token streaming with `--output-format stream-json`
+3. **Rate Limiting** → Intelligent backoff and model switching
+4. **Context Management** → Token counting and intelligent compaction
+5. **Tool Permissions** → Fine-grained control with patterns
+6. **Error Handling** → Comprehensive retry logic and circuit breakers
+7. **External Dependencies** → Replace mocks with actual @chasenocap packages when available
+
+## Working on the Enhancement Project
+
+When implementing enhancement stories:
+
+1. **Check Story Status** - Review `/docs/implementation/prioritized-stories.md` for current sprint work
+2. **Follow Migration Guide** - Use `/docs/implementation/migration-guide.md` for safe implementation
+3. **Use Code Patterns** - Reference `/docs/examples/code-patterns.md` for implementation examples
+4. **Maintain Compatibility** - All changes must pass existing tests without modification
+5. **Update Tracking** - Mark story status in this file and stories document
+
+### Development Workflow
+```bash
+# 1. Pick a story from current sprint
+# 2. Create feature branch
+git checkout -b feature/story-1.1-stream-json
+
+# 3. Implement with feature flag
+# 4. Write tests (maintain >90% coverage)
+# 5. Run validation
+npm test
+npm run typecheck
+npm run lint
+
+# 6. Update documentation
+# 7. Create PR with story reference
+```
+
+### Validation Checkpoints
+- **Unit Tests**: All existing tests must pass
+- **Integration Tests**: Test with real Claude CLI (run outside Claude)
+- **Performance Tests**: No regression from baseline
+- **Documentation**: Update relevant docs in `/docs/`
