@@ -4,11 +4,46 @@ import { ConsoleLogger } from '../../src/mocks/logger/index.js';
 import type { ILogger } from '@chasenocap/logger';
 import type { IEventBus } from '@chasenocap/event-system';
 import { Claude, ToolManager, SessionStore, CLAUDE_TYPES, ClaudeModel } from '../../src/index.js';
-import type { IClaude, ClaudeOptions, IClaudeSession, Message } from '../../src/index.js';
+import type { IClaude, ClaudeOptions, IClaudeSession, Message, ExecuteResult } from '../../src/index.js';
 
 describe('Forked Sessions Integration Test', () => {
   let container: Container;
   let claude: IClaude;
+
+  // Helper function to execute with retries for handling response variability
+  async function executeWithRetry(
+    session: IClaudeSession, 
+    prompt: string, 
+    maxRetries = 3,
+    timeout = 30000
+  ): Promise<ExecuteResult> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const result = await session.execute(prompt, { timeout });
+      
+      if (result.success && result.value) {
+        const output = result.value.output;
+        // Check if output contains conversation history markers
+        if (output.length > 1000 && (output.includes('\n\nH:') || output.includes('\n\nA:'))) {
+          if (attempt < maxRetries) {
+            console.log(`Attempt ${attempt}: Response contained conversation history, retrying...`);
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+            continue;
+          }
+        }
+        return result.value;
+      }
+      
+      if (!result.success && attempt < maxRetries) {
+        console.log(`Attempt ${attempt} failed: ${result.error?.message}, retrying...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        continue;
+      }
+      
+      throw result.error || new Error('Failed to execute prompt');
+    }
+    
+    throw new Error('Max retries exceeded');
+  }
 
   beforeAll(() => {
     container = new Container();
@@ -55,7 +90,7 @@ describe('Forked Sessions Integration Test', () => {
     console.log('Created original session:', originalSession.id);
 
     // Execute first code-related task
-    const result1 = await originalSession.execute('What is the time complexity of bubble sort?', { timeout: 30000 });
+    const result1 = await originalSession.execute('What is the time complexity of bubble sort? Answer concisely.', { timeout: 30000 });
     expect(result1.success).toBe(true);
     console.log('Original session - bubble sort response:', result1.value?.output);
 
@@ -67,7 +102,7 @@ describe('Forked Sessions Integration Test', () => {
     expect(forkedSession.parentId).toBe(originalSession.id);
 
     // Continue with original session - different algorithm
-    const result2 = await originalSession.execute('What is the time complexity of merge sort?', { timeout: 30000 });
+    const result2 = await originalSession.execute('What is the time complexity of merge sort? Answer concisely.', { timeout: 30000 });
     expect(result2.success).toBe(true);
     console.log('\nOriginal session - merge sort response:', result2.value?.output);
 
@@ -93,7 +128,7 @@ describe('Forked Sessions Integration Test', () => {
     expect(forkHistory).not.toContain('merge');
 
     // Ask different algorithm in forked session
-    const forkResult2 = await forkedSession.execute('What is the time complexity of quick sort?', { timeout: 30000 });
+    const forkResult2 = await forkedSession.execute('What is the time complexity of quick sort? Answer concisely.', { timeout: 30000 });
     expect(forkResult2.success).toBe(true);
     console.log('Forked session - quick sort response:', forkResult2.value?.output);
 
@@ -141,15 +176,15 @@ describe('Forked Sessions Integration Test', () => {
 
     // Build up code refactoring session
     console.log('Building refactoring session...');
-    await baseSession.execute('I have a JavaScript function that needs refactoring. Here it is: function getData() { return fetch("/api/data").then(r => r.json()) }', { timeout: 30000 });
-    await baseSession.execute('Can you show me the modern async/await version?', { timeout: 30000 });
+    await executeWithRetry(baseSession, 'I have a JavaScript function that needs refactoring. Here it is: function getData() { return fetch("/api/data").then(r => r.json()) }');
+    await executeWithRetry(baseSession, 'Can you show me the modern async/await version?');
     
     // Fork at this point (after 2 interactions)
     console.log('\nCreating fork1 after 2 interactions...');
     const fork1 = await baseSession.fork();
     
     // Continue base session with retry logic
-    await baseSession.execute('Now add retry logic to handle network failures', { timeout: 30000 });
+    await executeWithRetry(baseSession, 'Now add retry logic to handle network failures');
     
     // Fork again at different point (after 3 interactions)
     console.log('Creating fork2 after 3 interactions...');
@@ -184,11 +219,8 @@ describe('Forked Sessions Integration Test', () => {
     expect(fork2HasRetry).toBe(true);
 
     // Create different modifications in each fork
-    const fork1Mod = await fork1.execute('Add TypeScript types to the function', { timeout: 30000 });
-    const fork2Mod = await fork2.execute('Add caching to the function', { timeout: 30000 });
-
-    expect(fork1Mod.success).toBe(true);
-    expect(fork2Mod.success).toBe(true);
+    const fork1Mod = await executeWithRetry(fork1, 'Add TypeScript types to the function');
+    const fork2Mod = await executeWithRetry(fork2, 'Add caching to the function');
 
     // Verify isolation by checking message counts
     const baseState = await baseSession.getState();

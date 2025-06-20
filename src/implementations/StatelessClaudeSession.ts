@@ -217,9 +217,9 @@ export class StatelessClaudeSession implements IClaudeSession {
           
           // If the output is suspiciously long and contains conversation markers, 
           // it might be echoing the conversation history
-          if (cleanOutput.length > 5000 && (cleanOutput.includes('\n\nH:') || cleanOutput.includes('\n\nA:'))) {
+          if (cleanOutput.length > 1000 && (cleanOutput.includes('\n\nH:') || cleanOutput.includes('\n\nA:') || cleanOutput.includes('\nH:') || cleanOutput.includes('\nA:'))) {
             // Find the first occurrence of a conversation marker and truncate there
-            const markers = ['\n\nH:', '\n\nHuman:', '\n\nA:', '\n\nAssistant:'];
+            const markers = ['\n\nH:', '\n\nHuman:', '\n\nA:', '\n\nAssistant:', '\nH:', '\nHuman:', '\nA:', '\nAssistant:'];
             let earliestIndex = cleanOutput.length;
             
             for (const marker of markers) {
