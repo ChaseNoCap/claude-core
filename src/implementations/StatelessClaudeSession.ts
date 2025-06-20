@@ -106,6 +106,10 @@ export class StatelessClaudeSession implements IClaudeSession {
 
     // Add the new user message
     parts.push(`Human: ${userMessage}`);
+    
+    // Add explicit instruction to only respond to the current question
+    parts.push('');
+    parts.push('Assistant:');
 
     return parts.join('\n');
   }
@@ -122,9 +126,14 @@ export class StatelessClaudeSession implements IClaudeSession {
       // Log the prompt for debugging
       this.logger.debug(`Executing with context (${this.messages.length} previous messages)`);
       
-      // Additional debug for rapid test issues
-      if (prompt.includes('Generate commit message')) {
-        this.logger.debug(`Full prompt for commit generation:\n${contextualPrompt}`);
+      // Additional debug for test issues
+      if (prompt.includes('last question') || prompt.includes('capitals')) {
+        this.logger.debug(`Session ${this.id} - Building prompt with ${this.messages.length} messages`);
+        this.logger.debug(`Messages:`);
+        this.messages.forEach((msg, i) => {
+          this.logger.debug(`  ${i}: [${msg.role}] ${msg.content.substring(0, 50)}...`);
+        });
+        this.logger.debug(`Full prompt:\n${contextualPrompt}`);
       }
 
       // Execute Claude with -p flag for non-interactive output
@@ -184,6 +193,19 @@ export class StatelessClaudeSession implements IClaudeSession {
           const cleanOutput = parser.extractContent();
           const toolUses = parser.parseToolUses();
           
+          // Debug logging for output cleaning
+          if (cleanOutput.includes('\n\n') || cleanOutput.includes('Human:') || cleanOutput.includes('Assistant:')) {
+            this.logger.debug(`Session ${this.id} - Raw output may contain conversation markers`);
+            this.logger.debug(`Raw output length: ${output.length}`);
+            this.logger.debug(`Clean output length: ${cleanOutput.length}`);
+            if (cleanOutput.length > 100) {
+              this.logger.debug(`First 100 chars: "${cleanOutput.substring(0, 100)}"...`);
+              this.logger.debug(`Last 100 chars: ..."${cleanOutput.substring(cleanOutput.length - 100)}"`);
+            } else {
+              this.logger.debug(`Full clean output: "${cleanOutput}"`);
+            }
+          }
+          
           // Debug log for empty or error outputs
           if (!cleanOutput || cleanOutput.toLowerCase().includes('error')) {
             this.logger.warn(`Suspicious output for session ${this.id}: "${cleanOutput}"`);
@@ -197,9 +219,50 @@ export class StatelessClaudeSession implements IClaudeSession {
             timestamp: new Date(),
           };
 
+          // Clean the output to remove any accidental conversation history
+          let finalOutput = cleanOutput;
+          
+          // More aggressive cleanup - remove everything after conversation markers
+          // Check for both single and double newline patterns
+          const conversationMarkers = [
+            '\n\nH:', '\n\nHuman:', '\n\nA:', '\n\nAssistant:', 
+            '\n\nh:', '\n\na:', '\nH:', '\nHuman:', '\nA:', '\nAssistant:',
+            '\n\nQ:', '\n\nQuestion:', '\n\nq:',
+            '\nh:', '\na:' // Also check single newline with lowercase
+          ];
+          
+          for (const marker of conversationMarkers) {
+            const markerIndex = finalOutput.indexOf(marker);
+            if (markerIndex > 0) {
+              finalOutput = finalOutput.substring(0, markerIndex).trim();
+              break;
+            }
+          }
+          
+          // Also check if the output itself starts with a role prefix that shouldn't be there
+          const rolePrefixes = [
+            'Assistant:', 'Human:', 'A:', 'H:', 
+            'assistant:', 'human:', 'a:', 'h:',
+            'Assistant: ', 'Human: ', 'A: ', 'H: '
+          ];
+          for (const prefix of rolePrefixes) {
+            if (finalOutput.startsWith(prefix)) {
+              finalOutput = finalOutput.substring(prefix.length).trim();
+              break;
+            }
+          }
+          
+          // Final cleanup - ensure no trailing conversation markers
+          finalOutput = finalOutput.trim();
+          
+          // Log if we had to clean anything
+          if (finalOutput !== cleanOutput) {
+            this.logger.debug(`Session ${this.id} - Cleaned output from "${cleanOutput}" to "${finalOutput}"`);
+          }
+          
           const assistantMessage: Message = {
             role: 'assistant',
-            content: cleanOutput,
+            content: finalOutput,
             timestamp: new Date(),
           };
 
