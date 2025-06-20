@@ -9,6 +9,11 @@ This document contains a comprehensive, prioritized list of implementation stori
 - 🟢 **In Progress**: Currently being worked on
 - ✅ **Completed**: Finished and validated
 - 🔄 **Needs Revision**: Failed validation, needs rework
+- ❌ **Removed**: Feature doesn't exist in actual CLI
+
+## Important Note
+
+This document has been updated to reflect the actual Claude CLI capabilities based on the authoritative documentation at https://docs.anthropic.com/en/docs/claude-code/cli-usage. Many originally planned features have been removed as they don't exist in the actual CLI.
 
 ## Epic 1: Core Infrastructure Enhancement (P0 - Critical)
 
@@ -60,36 +65,39 @@ This document contains a comprehensive, prioritized list of implementation stori
 3. All existing tests still pass
 4. New integration tests for JSON format
 
-### Story 1.3: Implement Authentication Manager 🟡
-**Priority**: P0 - Critical
-**Effort**: 8 points
+### Story 1.3: ~~Implement Authentication Manager~~ ❌
+**Priority**: ~~P0 - Critical~~ REMOVED
+**Effort**: ~~8 points~~
 **Dependencies**: None
 
-**Description**: Create comprehensive authentication system supporting multiple methods.
+**Removal Note**: The Claude CLI does not expose authentication flags. Authentication is handled through environment variables (`ANTHROPIC_API_KEY`) only. There are no OAuth, Bedrock, or Vertex AI authentication options in the CLI.
+
+### Story 1.4: Session Resumption by ID 🟡
+**Priority**: P0 - Critical
+**Effort**: 5 points
+**Dependencies**: Story 1.2 (JSON format for session IDs)
+
+**Description**: Implement explicit session resumption via `-r "session-id"` flag for cost optimization through context caching.
 
 **Acceptance Criteria**:
-- [ ] Support API key from environment
-- [ ] Support API key from parameter
-- [ ] Add OAuth flow support
-- [ ] Implement Bedrock authentication
-- [ ] Implement Vertex AI authentication
-- [ ] Secure credential storage
+- [ ] Parse `-r` or `--resume` flag with session ID parameter
+- [ ] Load complete session history from SessionStore
+- [ ] Pass full conversation context to Claude to leverage caching
+- [ ] Track token usage and cost reduction from cached context
+- [ ] Return new session ID for the continued conversation
+- [ ] Maintain fork points and session lineage
 
 **Validation Points**:
-1. Security audit: No credentials in logs
-2. All auth methods tested in isolation
-3. Graceful fallback between auth methods
-4. Clear error messages for auth failures
+1. Session correctly resumes with full history
+2. API costs are reduced due to context caching (measure token difference)
+3. Fork points and lineage are maintained correctly
+4. No context loss or message duplication
+5. Session IDs are properly tracked and stored
 
-**Implementation Checklist**:
-```typescript
-// New files to create:
-// - src/interfaces/IAuthenticationManager.ts
-// - src/implementations/AuthenticationManager.ts
-// - src/implementations/auth/ApiKeyProvider.ts
-// - src/implementations/auth/OAuthProvider.ts
-// - src/implementations/auth/BedrockProvider.ts
-```
+**Implementation Notes**:
+- We intentionally do NOT implement `-c`/`--continue` (last session) to maintain explicit control
+- This is CRITICAL for cost optimization and correct forking behavior
+- Session resumption must include the complete conversation history
 
 ## Epic 2: Advanced Tool Management (P1 - High)
 
@@ -207,129 +215,51 @@ interface RateLimiter {
 
 ## Epic 4: Context Management (P2 - Medium)
 
-### Story 4.1: Implement Context Window Management 🔴
-**Priority**: P2 - Medium
-**Effort**: 8 points
-**Dependencies**: Story 1.2 (for token counting)
+### Story 4.1: ~~Implement Context Window Management~~ ❌
+**Priority**: ~~P2 - Medium~~ REMOVED
+**Effort**: ~~8 points~~
+**Dependencies**: ~~Story 1.2 (for token counting)~~
 
-**Description**: Add intelligent context window management with compaction.
+**Removal Note**: The Claude CLI does not expose context window management flags. There are no `--max-tokens`, `--context-window`, or similar flags available. Context management is handled internally by the CLI.
 
-**Acceptance Criteria**:
-- [ ] Estimate token usage before sending
-- [ ] Implement context compaction algorithm
-- [ ] Support configurable window sizes
-- [ ] Preserve important context
-- [ ] Handle overflow gracefully
-
-**Validation Points**:
-1. Never exceed context limits
-2. Important context retained
-3. Compaction is deterministic
-4. Performance acceptable (<100ms)
-
-### Story 4.2: Add System Prompt Management 🟡
-**Priority**: P2 - Medium
-**Effort**: 3 points
+### Story 4.2: ~~Add System Prompt Management~~ ❌
+**Priority**: ~~P2 - Medium~~ REMOVED
+**Effort**: ~~3 points~~
 **Dependencies**: None
 
-**Description**: Support system prompts via CLI flags instead of conversation history.
-
-**Acceptance Criteria**:
-- [ ] Support `--system-prompt` flag
-- [ ] Support `--append-system-prompt` flag
-- [ ] Load prompts from files
-- [ ] Template variable substitution
-- [ ] Prompt inheritance hierarchy
-
-**Validation Points**:
-1. System prompts correctly passed
-2. File loading works
-3. Templates render correctly
-4. No prompt injection possible
+**Removal Note**: The Claude CLI does not have `--system-prompt` or `--append-system-prompt` flags. System prompts must be included as part of the conversation history passed to the CLI, not as separate flags.
 
 ## Epic 5: Advanced Features (P2 - Medium)
 
-### Story 5.1: MCP Integration 🔴
-**Priority**: P2 - Medium
-**Effort**: 13 points
-**Dependencies**: Story 1.1, Story 1.2
+### Story 5.1: ~~MCP Integration~~ ❌
+**Priority**: ~~P2 - Medium~~ REMOVED
+**Effort**: ~~13 points~~
+**Dependencies**: ~~Story 1.1, Story 1.2~~
 
-**Description**: Implement Model Context Protocol support.
+**Removal Note**: MCP (Model Context Protocol) is not handled via flags in the Claude CLI. Instead, it uses the `claude mcp` command structure. MCP servers are managed through separate commands, not as flags to the main chat interface.
 
-**Acceptance Criteria**:
-- [ ] Parse `--mcp-config` flag
-- [ ] Load MCP server configurations
-- [ ] Support project-scoped `.mcp.json`
-- [ ] Implement MCP debugging
-- [ ] Handle MCP server lifecycle
+### Story 5.2: ~~Thinking Modes Support~~ ❌
+**Priority**: ~~P2 - Medium~~ REMOVED
+**Effort**: ~~3 points~~
+**Dependencies**: ~~Story 1.3 (for model features)~~
 
-**Validation Points**:
-1. MCP servers start correctly
-2. Tools from MCP available
-3. Clean shutdown of servers
-4. Debug output helpful
-
-### Story 5.2: Thinking Modes Support 🔴
-**Priority**: P2 - Medium
-**Effort**: 3 points
-**Dependencies**: Story 1.3 (for model features)
-
-**Description**: Add support for different thinking modes.
-
-**Acceptance Criteria**:
-- [ ] Parse `--thinking-mode` flag
-- [ ] Map modes to token allocations
-- [ ] Validate mode availability by model
-- [ ] Track thinking token usage
-- [ ] Provide mode recommendations
-
-**Validation Points**:
-1. Modes correctly affect output
-2. Token limits enforced
-3. Clear mode descriptions
-4. Usage tracking accurate
+**Removal Note**: The Claude CLI does not have a `--thinking-mode` flag or any thinking mode configuration options. This feature does not exist in the actual CLI.
 
 ## Epic 6: Developer Experience (P3 - Low)
 
-### Story 6.1: Add CLI Auto-completion 🔴
-**Priority**: P3 - Low
-**Effort**: 5 points
-**Dependencies**: Core features complete
+### Story 6.1: ~~Add CLI Auto-completion~~ ❌
+**Priority**: ~~P3 - Low~~ REMOVED
+**Effort**: ~~5 points~~
+**Dependencies**: ~~Core features complete~~
 
-**Description**: Implement shell auto-completion support.
+**Removal Note**: The Claude CLI documentation does not mention any auto-completion features. This functionality is not provided by the official CLI.
 
-**Acceptance Criteria**:
-- [ ] Generate completion scripts
-- [ ] Support bash completion
-- [ ] Support zsh completion
-- [ ] Support fish completion
-- [ ] Auto-complete file paths
+### Story 6.2: ~~Implement Usage Analytics~~ ❌
+**Priority**: ~~P3 - Low~~ REMOVED
+**Effort**: ~~5 points~~
+**Dependencies**: ~~Story 1.2~~
 
-**Validation Points**:
-1. Completions work in all shells
-2. Performance acceptable
-3. Completions stay updated
-4. Installation documented
-
-### Story 6.2: Implement Usage Analytics 🔴
-**Priority**: P3 - Low
-**Effort**: 5 points
-**Dependencies**: Story 1.2
-
-**Description**: Add comprehensive usage tracking and analytics.
-
-**Acceptance Criteria**:
-- [ ] Track token usage per session
-- [ ] Track cost accumulation
-- [ ] Generate usage reports
-- [ ] Export metrics to various formats
-- [ ] Configurable retention
-
-**Validation Points**:
-1. Metrics are accurate
-2. Privacy respected
-3. Reports are useful
-4. Storage efficient
+**Removal Note**: The Claude CLI does not provide built-in usage analytics features. While the JSON output format includes cost and token information, there are no CLI flags or features for tracking, reporting, or analyzing usage over time.
 
 ## Epic 7: Migration & Cleanup (P1 - High)
 
@@ -373,65 +303,61 @@ interface RateLimiter {
 3. Documentation accurate
 4. Performance improved
 
-## Implementation Schedule
+## Implementation Schedule (Updated)
 
 ### Sprint 1 (Week 1-2): Foundation
 - Story 1.1: Stream-JSON Output *(5 points)*
 - Story 1.2: JSON Output Format *(3 points)*
-- Story 3.2: Timeout Implementation *(3 points)*
-- Story 4.2: System Prompt Management *(3 points)*
-**Total: 14 points**
+- Story 3.2: Timeout Implementation *(3 points)* ✅
+- **NEW** Story 1.4: Session Resumption by ID *(5 points)* - Critical for cost optimization
+**Total: 16 points**
 
-### Sprint 2 (Week 3-4): Authentication & Security  
-- Story 1.3: Authentication Manager *(8 points)*
+### Sprint 2 (Week 3-4): Tool Management  
 - Story 2.1: Enhanced Tool Restrictions *(5 points)*
-**Total: 13 points**
-
-### Sprint 3 (Week 5-6): Performance
-- Story 3.1: Rate Limiting *(5 points)*
-- Story 3.3: Retry Logic *(5 points)*
 - Story 2.2: Dangerous Mode *(2 points)*
+- Story 3.1: Rate Limiting *(5 points)*
 **Total: 12 points**
 
-### Sprint 4 (Week 7-8): Advanced Features
-- Story 4.1: Context Management *(8 points)*
-- Story 5.2: Thinking Modes *(3 points)*
-**Total: 11 points**
-
-### Sprint 5 (Week 9-10): Integration & Polish
-- Story 5.1: MCP Integration *(13 points)*
+### Sprint 3 (Week 5-6): Performance & Resilience
+- Story 3.3: Retry Logic *(5 points)*
+- Story 7.1: Migration Path *(8 points)*
 **Total: 13 points**
 
-### Sprint 6 (Week 11-12): Migration & Cleanup
-- Story 7.1: Migration Path *(8 points)*
+### Sprint 4 (Week 7-8): Cleanup & Polish
 - Story 7.2: Remove Deprecated *(3 points)*
+- Additional testing and documentation *(8 points)*
 **Total: 11 points**
 
-### Backlog (As time permits):
-- Story 6.1: CLI Auto-completion *(5 points)*
-- Story 6.2: Usage Analytics *(5 points)*
+### Removed Stories:
+- ❌ Story 1.3: Authentication Manager (no auth flags in CLI)
+- ❌ Story 4.1: Context Window Management (no context flags in CLI)
+- ❌ Story 4.2: System Prompt Management (no system prompt flags in CLI)
+- ❌ Story 5.1: MCP Integration (MCP is a command, not flags)
+- ❌ Story 5.2: Thinking Modes (doesn't exist)
+- ❌ Story 6.1: CLI Auto-completion (not mentioned in official docs)
+- ❌ Story 6.2: Usage Analytics (not a CLI feature)
 
-## Key Validation Gates
+## Key Validation Gates (Updated)
 
-### Gate 1: After Sprint 2 (Week 4)
+### Gate 1: After Sprint 1 (Week 2)
 - [ ] All core output formats working
-- [ ] Authentication fully functional
+- [ ] Timeout functionality verified
 - [ ] Performance benchmarks pass
+- [ ] Basic integration tests complete
+
+### Gate 2: After Sprint 2 (Week 4)
+- [ ] Tool restrictions fully functional
+- [ ] Dangerous mode properly warned
+- [ ] Rate limiting prevents errors
 - [ ] Security audit complete
 
-### Gate 2: After Sprint 4 (Week 8)
-- [ ] Rate limiting prevents errors
-- [ ] Context never exceeds limits
+### Gate 3: After Sprint 3 (Week 6)
 - [ ] All retry logic tested
+- [ ] Migration path validated
+- [ ] 100% backward compatibility
 - [ ] Load testing complete
 
-### Gate 3: Before Migration (Week 10)
-- [ ] All features implemented
-- [ ] 100% backward compatibility
-- [ ] Migration guide complete
-- [ ] Rollback tested
-
-### Gate 4: Final Release (Week 12)
+### Gate 4: Final Release (Week 8)
 - [ ] All deprecated code removed
 - [ ] Documentation complete
 - [ ] Performance improved by >20%
@@ -451,11 +377,18 @@ interface RateLimiter {
 4. **Risk**: Claude CLI changes
    - **Mitigation**: Version detection, graceful degradation
 
-## Success Metrics
+## Success Metrics (Updated)
 
 - Test coverage remains >90%
 - Zero breaking changes for existing users
 - Performance improvement >20%
-- Support for all modern CLI features
+- Support for all **actual** Claude CLI features:
+  - ✅ Stream-JSON output format
+  - ✅ JSON output format
+  - ✅ Enhanced tool restrictions
+  - ✅ Dangerous mode flag
+  - ✅ Proper timeout handling
+  - ✅ Rate limiting and retry logic
 - Clean, maintainable codebase
 - Comprehensive documentation
+- Reduced implementation timeline from 12 weeks to 8 weeks

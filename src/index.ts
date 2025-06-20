@@ -75,3 +75,13 @@ export { ProcessUtils, ProcessEventEmitter } from './utils/process-utils.js';
 // Constants
 export { DEFAULT_TIMEOUTS, OPERATION_TIMEOUTS } from './constants/defaults.js';
 export type { OperationType } from './constants/defaults.js';
+export { 
+  ClaudeExitCode,
+  OutputFormat,
+  InputFormat,
+  JsonResponseType,
+  JsonResponseSubtype,
+  ClaudeCliModel,
+  CLAUDE_ENV_VARS
+} from './constants/cli-enums.js';
+export type { ClaudeJsonResponse } from './constants/cli-enums.js';

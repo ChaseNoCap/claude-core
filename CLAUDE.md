@@ -70,10 +70,10 @@ Key architectural patterns:
 - `OutputParser` - Parses Claude responses and tool use ✅
 
 **Enhancement Status (Sprint 1 - Foundation):**
-- [ ] Story 1.1: Stream-JSON Output Format (5 points)
-- [ ] Story 1.2: JSON Output Format (3 points)
+- [ ] Story 1.1: Stream-JSON Output Format (5 points) - `--output-format stream-json`
+- [ ] Story 1.2: JSON Output Format (3 points) - `--output-format json`
 - [x] Story 3.2: Timeout Implementation (3 points) ✅
-- [ ] Story 4.2: System Prompt Management (3 points)
+- [ ] Story 1.4: Session Resumption by ID (5 points) - `-r "session-id"` - **CRITICAL for cost optimization**
 
 ## Testing
 
@@ -109,14 +109,15 @@ npm test tests/integration/
 - SessionStore tracks lineage and history between stateless invocations
 - **Enhancement Documentation**: See `/docs/` for comprehensive enhancement guides
 - **Current State**: See `CURRENT_STATE.md` and `NEXT_STEPS.md` for legacy tracking
+- **Session Strategy**: We ONLY support explicit session resumption via `-r "session-id"` for precise control and cost optimization. We do NOT implement `-c`/`--continue` (ambiguous last session)
 
 ## Current Enhancement Focus
 
 ### Sprint 1 (Current - Weeks 1-2): Foundation
-1. **Stream-JSON Output** - Real-time streaming support
-2. **JSON Output Format** - Structured responses with metadata
-3. **Timeout Implementation** - Proper process timeout handling
-4. **System Prompt Management** - CLI flag-based prompts
+1. **Stream-JSON Output** - Real-time streaming support via `--output-format stream-json`
+2. **JSON Output Format** - Structured responses via `--output-format json`
+3. **Timeout Implementation** - Proper process timeout handling ✅
+4. ~~**System Prompt Management**~~ - REMOVED (CLI flags don't exist)
 
 ### Upcoming Sprints
 - **Sprint 2**: Authentication & Security (Weeks 3-4)
@@ -133,13 +134,22 @@ npm test tests/integration/
 
 ## Current Gaps Being Addressed
 
-1. **Authentication** → Multi-provider support (API key, OAuth, Bedrock, Vertex)
-2. **Streaming** → Real-time token streaming with `--output-format stream-json`
-3. **Rate Limiting** → Intelligent backoff and model switching
-4. **Context Management** → Token counting and intelligent compaction
-5. **Tool Permissions** → Fine-grained control with patterns
+1. **Output Formats** → JSON and stream-JSON support via `--output-format` flag
+2. **Tool Permissions** → Enhanced restrictions via `--allowedTools` and `--disallowedTools`
+3. **Session Management** → Support for `--continue` and `--resume` flags
+4. **Input Handling** → Support for `--input-format` flag
+5. **Rate Limiting** → Intelligent backoff and model switching (internal)
 6. **Error Handling** → Comprehensive retry logic and circuit breakers
 7. **External Dependencies** → Replace mocks with actual @chasenocap packages when available
+
+## Removed Features (Not in Actual CLI)
+
+The following features were removed from our roadmap as they don't exist in the Claude CLI:
+- System prompt flags (`--system-prompt`, `--append-system-prompt`)
+- Authentication flags (no `--api-key` or similar)
+- Context management flags (`--max-context-tokens`, `--clear-context`)
+- MCP flags (`--mcp-config`, `--mcp-debug` - MCP uses `claude mcp` command)
+- Thinking modes (no such feature exists)
 
 ## Working on the Enhancement Project
 
